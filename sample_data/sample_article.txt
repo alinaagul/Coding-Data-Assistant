@@ -1,0 +1,19 @@
+Open-weight large language models have rapidly closed the gap with proprietary
+frontier systems over the past two years. Where early open models struggled
+with multi-step reasoning, instruction following, and multilingual coverage,
+newer releases increasingly ship with dedicated "thinking" modes, longer
+context windows, and native tool-calling support. This shift matters for
+practical deployment: a model that can run entirely on a single consumer
+GPU, with no data leaving the user's machine, removes a major barrier for
+regulated industries, offline environments, and cost-sensitive startups.
+
+The tradeoffs are not eliminated, only rebalanced. Local inference is bound
+by available VRAM and compute, so throughput and context length are usually
+lower than what a hosted frontier API can offer. Quantization helps close
+this gap by shrinking model weights at a modest quality cost, letting an
+8-billion-parameter model run comfortably on consumer hardware such as a
+laptop GPU or a mid-range desktop card. For many everyday tasks -- drafting
+text, writing boilerplate code, translating short passages, or extracting
+structured data from a document -- the quality difference compared to a much
+larger hosted model is often small enough not to matter, while the latency,
+privacy, and cost profile of local inference is meaningfully better.
