@@ -1,0 +1,10 @@
+{
+  "server": "192.168.157.55,5541",
+  "port": 1433,
+  "database": "SDXP_Develop",
+  "username": "sa",
+  "password": "Sdxp@123",
+  "driver": "ODBC Driver 17 for SQL Server",
+  "encrypt": true,
+  "trust_server_certificate": true
+}
