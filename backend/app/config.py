@@ -26,15 +26,13 @@ class Settings(BaseSettings):
     ollama_temperature: float = 0.2
     ollama_request_timeout_s: int = 120
 
-    # ---- Default / fallback SQL Server connection ----------------------
-    # These act as defaults that pre-fill the "Settings" screen the first
-    # time the app runs. The connection actually used at runtime is
-    # whatever was last saved via POST /api/connection/save (see
-    # db_connection.py: ConnectionManager). Credentials should belong to a
-    # READ-ONLY SQL Server login - the backend does not enforce that at
-    # the DB-permission level, only at the SQL-statement level (see
-    # sql_validator.py); a true read-only login is a required deployment
-    # step (see README).
+    # ---- SQL Server connection ------------------------------------------
+    # The only source of DB connection info - set these in backend/.env and
+    # restart the backend. There is no UI or API to change them at runtime.
+    # Credentials should belong to a READ-ONLY SQL Server login - the backend
+    # does not enforce that at the DB-permission level, only at the
+    # SQL-statement level (see sql_validator.py); a true read-only login is
+    # a required deployment step (see README).
     mssql_server: str = ""
     mssql_port: int = 1433
     mssql_database: str = ""
@@ -43,11 +41,6 @@ class Settings(BaseSettings):
     mssql_driver: str = "ODBC Driver 18 for SQL Server"
     mssql_encrypt: bool = True
     mssql_trust_server_certificate: bool = True
-
-    # Where saved connection profiles are persisted between restarts.
-    # A local JSON file is enough for this app; swap for a secrets manager
-    # in a real production deployment.
-    connection_store_path: str = "connections.json"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

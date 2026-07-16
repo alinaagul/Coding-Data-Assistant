@@ -2,17 +2,6 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
-class ConnectionPayload(BaseModel):
-    server: str
-    port: int = 1433
-    database: str
-    username: str
-    password: str
-    driver: Optional[str] = None
-    encrypt: bool = True
-    trust_server_certificate: bool = True
-
-
 class QueryPayload(BaseModel):
     sql: str
     max_rows: int = Field(default=1000, le=10000)

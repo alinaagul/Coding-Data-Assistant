@@ -55,7 +55,7 @@ export default function Dashboard() {
       <div className="max-w-lg mx-auto mt-24 text-center card p-8">
         <h2 className="font-display font-bold text-lg mb-2">No database connected</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Head to Settings to enter your SQL Server details and connect a read-only login.
+          Set MSSQL_* in backend/.env to a read-only login and restart the backend.
         </p>
       </div>
     )

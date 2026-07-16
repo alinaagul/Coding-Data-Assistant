@@ -1,14 +1,3 @@
-export interface ConnectionPayload {
-  server: string
-  port: number
-  database: string
-  username: string
-  password: string
-  driver?: string
-  encrypt: boolean
-  trust_server_certificate: boolean
-}
-
 export interface ConnectionStatus {
   connected: boolean
   connection: Record<string, any> | null

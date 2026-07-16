@@ -14,12 +14,9 @@ exactly one place, per the project requirements.
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import time
 from dataclasses import dataclass, asdict
-from pathlib import Path
 from typing import Optional
 
 import pyodbc
@@ -80,48 +77,27 @@ class SqlServerConnectionInfo:
 
 class ConnectionManager:
     """
-    Owns the *current* SQL Server connection profile and the SQLAlchemy
-    engine built from it. Profiles are persisted to a small JSON file
-    (path from Settings.connection_store_path) so the app remembers the
-    last-used database between restarts. Passwords are stored locally only
-    - for real production use, swap `_load`/`_save` for a proper secrets
-    manager / vault.
+    Owns the SQLAlchemy engine for the single SQL Server connection
+    configured via environment variables (see config.py / backend/.env).
+    There is no UI or API to change this at runtime - edit .env and
+    restart the backend.
     """
 
     def __init__(self) -> None:
-        self._info: Optional[SqlServerConnectionInfo] = None
+        self._info = SqlServerConnectionInfo(
+            server=settings.mssql_server,
+            port=settings.mssql_port,
+            database=settings.mssql_database,
+            username=settings.mssql_username,
+            password=settings.mssql_password,
+        )
         self._engine: Optional[Engine] = None
-        self._store_path = Path(settings.connection_store_path)
-        self._load()
 
-    # -- persistence ---------------------------------------------------
-    def _load(self) -> None:
-        if self._store_path.exists():
-            try:
-                data = json.loads(self._store_path.read_text())
-                self._info = SqlServerConnectionInfo(**data)
-            except Exception:  # pragma: no cover - corrupted file, ignore
-                logger.warning("Could not load saved connection profile.")
-                self._info = None
-        elif settings.mssql_server:
-            # fall back to .env defaults if nothing has been saved yet
-            self._info = SqlServerConnectionInfo(
-                server=settings.mssql_server,
-                port=settings.mssql_port,
-                database=settings.mssql_database,
-                username=settings.mssql_username,
-                password=settings.mssql_password,
-            )
-
-    def _save(self, info: SqlServerConnectionInfo) -> None:
-        self._store_path.write_text(json.dumps(asdict(info), indent=2))
-
-    # -- public API ------------------------------------------------------
-    def test_connection(self, info: SqlServerConnectionInfo) -> dict:
-        """Attempt a real connection + trivial query. Never mutates state."""
+    def test_connection(self) -> dict:
+        """Attempt a real connection + trivial query against the configured server."""
         start = time.time()
         try:
-            conn = pyodbc.connect(info.odbc_connection_string(), timeout=8)
+            conn = pyodbc.connect(self._info.odbc_connection_string(), timeout=8)
             cursor = conn.cursor()
             cursor.execute("SELECT @@VERSION")
             version_row = cursor.fetchone()
@@ -146,33 +122,22 @@ class ConnectionManager:
         except pyodbc.Error as e:
             return {"success": False, "elapsed_s": round(time.time() - start, 3), "error": str(e)}
 
-    def connect(self, info: SqlServerConnectionInfo, persist: bool = True) -> dict:
-        result = self.test_connection(info)
-        if not result["success"]:
-            return result
-        self._info = info
-        self._engine = create_engine(info.sqlalchemy_url(), poolclass=NullPool, pool_pre_ping=True)
-        if persist:
-            self._save(info)
-        return result
-
-    def disconnect(self) -> None:
-        if self._engine is not None:
-            self._engine.dispose()
-        self._engine = None
-
     @property
     def is_connected(self) -> bool:
-        return self._engine is not None
+        if not self._info.server:
+            return False
+        return self.test_connection().get("success", False)
 
     @property
     def info(self) -> Optional[SqlServerConnectionInfo]:
-        return self._info
+        return self._info if self._info.server else None
 
     def get_engine(self) -> Engine:
+        if not self._info.server:
+            raise RuntimeError(
+                "No database configured. Set MSSQL_* variables in backend/.env and restart the backend."
+            )
         if self._engine is None:
-            if self._info is None:
-                raise RuntimeError("No database connection configured yet. Visit Settings first.")
             self._engine = create_engine(
                 self._info.sqlalchemy_url(), poolclass=NullPool, pool_pre_ping=True
             )
@@ -180,8 +145,10 @@ class ConnectionManager:
 
     def raw_connection(self):
         """A plain pyodbc connection, used where SQLAlchemy adds no value."""
-        if self._info is None:
-            raise RuntimeError("No database connection configured yet. Visit Settings first.")
+        if not self._info.server:
+            raise RuntimeError(
+                "No database configured. Set MSSQL_* variables in backend/.env and restart the backend."
+            )
         return pyodbc.connect(self._info.odbc_connection_string(), timeout=15)
 
 

@@ -7,7 +7,7 @@ other model, no data leaving your machine, no Docker required.
 - **Frontend:** React + TypeScript + Tailwind CSS + Vite
 - **Backend:** Python + FastAPI + SQLAlchemy + pyodbc
 - **Database:** Microsoft SQL Server (read-only access only)
-- **AI:** Ollama, model `qwen3:8b` (the only model supported — no model picker)
+- **AI:** Ollama, model `qwen3:8b` (the only model supported - no model picker)
 
 ## Why this is safe to point at a real database
 
@@ -25,6 +25,11 @@ other model, no data leaving your machine, no Docker required.
    is the single place that builds the SQL Server connection and the single
    place that talks to Ollama/qwen3:8b - every router imports from it rather
    than each rolling its own connection or model logic.
+4. **Connection is config, not app state.** The database connection is read
+   once from `backend/.env` at startup. There's no UI form or API endpoint
+   that accepts credentials from the browser and no local file where they get
+   persisted - to point the app at a different database, edit `.env` and
+   restart the backend.
 
 ## Project structure
 
@@ -33,13 +38,13 @@ qwen-db-analyst/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI app + router registration
-│   │   ├── config.py            # env-driven settings
-│   │   ├── db_connection.py     # SQL Server connection + qwen3:8b model selection (single source of truth)
+│   │   ├── config.py            # env-driven settings (incl. MSSQL_* connection)
+│   │   ├── db_connection.py     # SQL Server engine + qwen3:8b model client (single source of truth)
 │   │   ├── schema_context.py    # builds a compact schema summary for AI prompts
 │   │   ├── sql_validator.py     # SELECT-only enforcement
 │   │   ├── schemas.py           # Pydantic request/response models
 │   │   └── routers/
-│   │       ├── connection.py    # test / connect / disconnect / status
+│   │       ├── connection.py    # GET /status - read-only DB + AI model status
 │   │       ├── schema.py        # databases / tables / columns / indexes / FKs / sample data
 │   │       ├── query.py         # execute / validate / execution plan
 │   │       ├── ai.py            # chat, NL to SQL, explain query, optimize query
@@ -67,7 +72,7 @@ qwen-db-analyst/
   ```
   Ollama usually runs as a background service after install. If not:
   `ollama serve`.
-- **Microsoft ODBC Driver 18 for SQL Server** installed:
+- **Microsoft ODBC Driver for SQL Server** (17 or 18) installed:
   - Windows: usually already present, or [download here](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server).
   - macOS: `brew install msodbcsql18`
   - Linux (Debian/Ubuntu): follow [Microsoft's install steps](https://learn.microsoft.com/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server).
@@ -86,20 +91,46 @@ ALTER ROLE db_datareader ADD MEMBER ai_analyst_readonly;
 -- Do NOT add db_datawriter, db_owner, or any DDL-capable role.
 ```
 
-## 2. Run the backend
+## 2. Configure the database connection
+
+The backend reads its SQL Server connection from `backend/.env` - there is
+no in-app form for this. Copy the example file and fill in your details:
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Edit `backend/.env`:
+
+```
+MSSQL_SERVER=sql.mycompany.com
+MSSQL_PORT=1433
+MSSQL_DATABASE=YourDatabase
+MSSQL_USERNAME=ai_analyst_readonly
+MSSQL_PASSWORD=Use-A-Strong-Password-Here!
+MSSQL_DRIVER=ODBC Driver 18 for SQL Server
+```
+
+`MSSQL_DRIVER` must match the exact driver name registered on your system
+(`odbcinst -q -d` on macOS/Linux lists them). Restart the backend after any
+change to `.env`.
+
+`backend/.env` is git-ignored - never commit real credentials.
+
+## 3. Run the backend
 
 ```bash
 cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env             # edit if you want to pre-fill defaults
 uvicorn app.main:app --reload --port 8000
 ```
 
 Backend runs at http://localhost:8000 (Swagger docs at `/docs`).
 
-## 3. Run the frontend
+## 4. Run the frontend
 
 Open a second terminal:
 
@@ -113,18 +144,10 @@ npm run dev
 Frontend runs at http://localhost:5173 and proxies `/api` calls to the
 backend automatically (configured in `vite.config.ts`).
 
-## 4. First-time setup in the app
-
-1. Open http://localhost:5173
-2. Go to **Settings**
-3. Enter your SQL Server details (server, port, database, username, password)
-4. Click **Test Connection** - confirms credentials work without saving
-5. Click **Save & Connect** - persists the connection (to
-   `backend/connections.json`) and activates it
-6. Check the **AI Model** panel on the same page to confirm Ollama is
-   reachable and `qwen3:8b` is pulled
-
 ## 5. Using the app
+
+Open http://localhost:5173. If `backend/.env` is configured correctly, the
+Dashboard connects automatically - no setup step in the UI.
 
 - **Dashboard** - table/row/index counts, database size, health score, and
   charts for largest tables, storage usage, index coverage, and query
@@ -141,23 +164,28 @@ backend automatically (configured in `vite.config.ts`).
 - **Reports** - Database Health, Performance, Missing Index, and Data
   Quality reports, each with an AI-written narrative summary and JSON/CSV/PDF
   export (PDF via the browser print dialog).
-- **Settings** - SQL Server connection form + Test Connection, and a live
-  status panel for the Ollama server / qwen3:8b model.
+- **Settings** - read-only status panel: which database is configured (from
+  `.env`) and whether it's reachable, plus the Ollama server / qwen3:8b
+  model status.
 
 ## 6. Environment variables
 
 See `backend/.env.example` and `frontend/.env.example`. Notably:
 
 - `OLLAMA_MODEL=qwen3:8b` - the only model this app is wired to use.
-- `MSSQL_*` - optional defaults; the actively-used connection is whatever
-  was last saved via Settings.
+- `MSSQL_*` - the SQL Server connection; the only place it's configured.
+- `CORS_ORIGINS` (backend) - must include the frontend's origin.
+- `VITE_API_BASE_URL` (frontend) - the backend's base URL.
 
 ## Troubleshooting
 
 - **"Ollama server is not reachable"** - run `ollama serve` and keep it open.
 - **"Model not found" / model_pulled: false in Settings** - run
   `ollama pull qwen3:8b`.
-- **pyodbc / driver errors on connect** - confirm ODBC Driver 18 is
+- **Dashboard shows "No database connected"** - check `MSSQL_*` in
+  `backend/.env`, confirm the driver name matches what's installed, and
+  restart the backend after editing `.env`.
+- **pyodbc / driver errors on connect** - confirm the ODBC driver is
   installed and that `MSSQL_DRIVER` in `.env` matches the exact driver name
   registered on your system (`odbcinst -q -d` on macOS/Linux lists them).
 - **CORS errors in the browser console** - make sure `CORS_ORIGINS` in
@@ -165,12 +193,11 @@ See `backend/.env.example` and `frontend/.env.example`. Notably:
 
 ## Limitations / next steps
 
-- `connections.json` stores the SQL Server password locally in plaintext for
-  simplicity; swap this for a secrets manager (Azure Key Vault, HashiCorp
-  Vault, etc.) before any real production deployment.
+- Credentials live in `backend/.env` in plaintext for simplicity; swap for a
+  secrets manager (Azure Key Vault, HashiCorp Vault, etc.) before any real
+  production deployment.
 - The missing-index and slow-query reports read from SQL Server's DMVs
   (`sys.dm_db_missing_index_*`, `sys.dm_exec_query_stats`), which reset on
   service restart and only reflect activity since then.
-- Duplicate-record detection (`/api/reports/find-duplicates`) requires the
-  caller to specify which columns define a "duplicate" for a given table,
-  since that's business-specific.
+- Duplicate-record detection requires the caller to specify which columns
+  define a "duplicate" for a given table, since that's business-specific.

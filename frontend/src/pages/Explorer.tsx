@@ -28,7 +28,7 @@ export default function Explorer() {
         const t: any = await api.listTables()
         setTables(t)
       } catch (e: any) {
-        push('error', e.message || 'Could not load tables. Connect a database in Settings.')
+        push('error', e.message || 'Could not load tables. Check MSSQL_* in backend/.env.')
       } finally {
         setLoadingTables(false)
       }

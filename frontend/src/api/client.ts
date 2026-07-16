@@ -30,10 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  // connection
-  testConnection: (payload: any) => request('/api/connection/test', { method: 'POST', body: JSON.stringify(payload) }),
-  connect: (payload: any) => request('/api/connection/connect', { method: 'POST', body: JSON.stringify(payload) }),
-  disconnect: () => request('/api/connection/disconnect', { method: 'POST' }),
+  // connection (read-only; configured via backend/.env)
   status: () => request('/api/connection/status'),
 
   // schema
